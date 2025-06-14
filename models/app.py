@@ -80,4 +80,12 @@ if uploaded_file and model and class_names:
         # 🔍 Make prediction
         prediction = model.predict(data)
         index = np.argmax(prediction)
-        class_name = class_names
+        class_name = class_names[index]
+        confidence_score = prediction[0][index]
+
+        # ✅ Display result
+        st.success(f"🎯 **Prediction:** {class_name.strip()}")
+        st.info(f"📊 **Confidence:** {confidence_score:.2%}")
+
+    except Exception as e:
+        st.error(f"❌ Failed to process image: {e}")
