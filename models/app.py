@@ -1,81 +1,83 @@
 import streamlit as st
-
-# ✅ MUST BE FIRST STREAMLIT COMMAND
-st.set_page_config(page_title="Fabriconator", layout="centered")
-
-from PIL import Image, ImageOps
 import numpy as np
+from PIL import Image
 from keras.models import load_model
 from keras.layers import DepthwiseConv2D
+import os
 
-# 📛 Patch for DepthwiseConv2D to fix 'groups=1' error from Teachable Machine
+# ──────────────────────────────────────────────────────────────────────
+# 🔧 Patch for Teachable Machine DepthwiseConv2D
 class PatchedDepthwiseConv2D(DepthwiseConv2D):
-    def __init__(self, *args, groups=1, **kwargs):
+    def __init__(self, *args, **kwargs):
+        kwargs.pop("groups", None)
         super().__init__(*args, **kwargs)
 
-# ⏫ Disable scientific notation
-np.set_printoptions(suppress=True)
-
-# 🚀 Load model and labels with patch
+# ──────────────────────────────────────────────────────────────────────
+# 📦 Load model and labels with caching
 @st.cache_resource
 def load_model_and_labels():
-    model = load_model("keras_Model.h5", custom_objects={"DepthwiseConv2D": PatchedDepthwiseConv2D}, compile=False)
-    labels = [label.strip() for label in open("labels.txt", "r").readlines()]
-    return model, labels
+    model_path = "keras_Model.h5"
+    labels_path = "labels.txt"
 
-model, class_names = load_model_and_labels()
+    if not os.path.exists(model_path):
+        st.error(f"❌ Model file not found at: {model_path}")
+        return None, None
 
-# 🧠 Prediction function
-def predict_teachable_model(image):
-    # Teachable Machine expects 224x224 images
-    size = (224, 224)
-    image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
+    if not os.path.exists(labels_path):
+        st.error(f"❌ Labels file not found at: {labels_path}")
+        return None, None
 
-    # Normalize image: (pixel / 127.5) - 1
-    image_array = np.asarray(image).astype(np.float32)
-    normalized_image_array = (image_array / 127.5) - 1
+    try:
+        model = load_model(model_path, custom_objects={"DepthwiseConv2D": PatchedDepthwiseConv2D}, compile=False)
+        labels = [label.strip() for label in open(labels_path, "r").readlines()]
+        return model, labels
+    except Exception as e:
+        st.error(f"❌ Failed to load model: {e}")
+        return None, None
 
-    # Reshape for model input
-    data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
-    data[0] = normalized_image_array
+# ──────────────────────────────────────────────────────────────────────
+# 🏠 Page setup
+st.set_page_config(page_title="Fabriconator", page_icon="🧵")
 
-    # Predict
-    prediction = model.predict(data)
-    index = np.argmax(prediction)
-    class_name = class_names[index]
-    confidence = float(prediction[0][index]) * 100
-
-    return class_name, confidence
-
-# ========== 🌐 Streamlit UI ==========
-
+# ──────────────────────────────────────────────────────────────────────
+# 🎨 Sidebar UI
 st.sidebar.title("🧵 Fabriconator")
-st.sidebar.image("logo.jpg", caption="Fabriconator", use_container_width=True)
+st.sidebar.info("Upload an image of fabric to detect defects.")
+uploaded_file = st.sidebar.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
 
-st.sidebar.markdown("Upload a fabric image to detect defects.")
-
-uploaded_file = st.sidebar.file_uploader("📤 Upload an image", type=["jpg", "jpeg", "png"])
-
-st.title("🧵 Fabriconator - Fabric Defect Detector")
-
+# ──────────────────────────────────────────────────────────────────────
+# 📄 Main page info
+st.title("🧠 Fabriconator - Fabric Defect Detection AI")
 st.markdown("""
-Fabriconator is an AI-powered tool trained to detect defects in fabric images.  
-It classifies fabric into one of the following:
-- 🕳️ **Hole**
-- ⚫ **Spot**
-- ➖ **Line**
-- ✅ **Good**
+**Fabriconator** is an AI-powered image classification tool trained to detect **defects in fabric** using machine learning.
+It can identify:
+- 🕳️ Holes  
+- 🔘 Spots  
+- 📏 Lines  
+- ✅ Good (No defect)
 
-Upload a fabric image from the sidebar to get started.
+Upload a fabric image using the sidebar to get started!
 """)
 
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="🖼️ Uploaded Fabric Image", use_container_width=True)
+# ──────────────────────────────────────────────────────────────────────
+# 🧠 Load model and labels
+model, class_names = load_model_and_labels()
 
-    with st.spinner("🔍 Analyzing..."):
-        label, confidence = predict_teachable_model(image)
+# ──────────────────────────────────────────────────────────────────────
+# 📷 Handle uploaded image
+if uploaded_file and model and class_names:
+    try:
+        image = Image.open(uploaded_file).convert("RGB")
+        st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    st.success("✅ Detection Complete!")
-    st.markdown(f"### 🎯 Result: **{label.upper()}**")
-    st.markdown(f"**📊 Confidence:** {confidence:.2f}%")
+        # 🧮 Convert image to numpy array and normalize (NO RESIZE)
+        image_array = np.asarray(image)
+        normalized_image = (image_array.astype(np.float32) / 127.5) - 1
+
+        # 🧾 Ensure shape (1, h, w, 3)
+        data = np.expand_dims(normalized_image, axis=0)
+
+        # 🔍 Make prediction
+        prediction = model.predict(data)
+        index = np.argmax(prediction)
+        class_name = class_names
