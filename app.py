@@ -19,9 +19,20 @@ np.set_printoptions(suppress=True)
 # 🚀 Load model and labels with patch
 @st.cache_resource
 def load_model_and_labels():
-    model = load_model("keras_Model.h5", custom_objects={"DepthwiseConv2D": PatchedDepthwiseConv2D}, compile=False)
-    labels = [label.strip() for label in open("labels.txt", "r").readlines()]
+    try:
+        model = load_model("keras_Model.h5", custom_objects={"DepthwiseConv2D": PatchedDepthwiseConv2D}, compile=False)
+    except OSError:
+        st.error("❌ Model file not found or couldn't be loaded. Please ensure `keras_Model.h5` is in the app directory.")
+        st.stop()
+
+    try:
+        labels = [label.strip() for label in open("labels.txt", "r").readlines()]
+    except FileNotFoundError:
+        st.error("❌ `labels.txt` not found. Please include it with the model.")
+        st.stop()
+
     return model, labels
+
 
 model, class_names = load_model_and_labels()
 
