@@ -1,36 +1,34 @@
+import os
 import streamlit as st
-import numpy as np
-from PIL import Image
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import DepthwiseConv2D
-import os
 
-# ──────────────────────────────────────────────────────────────────────
-# 🔧 Patch for Teachable Machine DepthwiseConv2D
-class PatchedDepthwiseConv2D(DepthwiseConv2D):
-    def __init__(self, *args, **kwargs):
-        kwargs.pop("groups", None)
-        super().__init__(*args, **kwargs)
-
-# ──────────────────────────────────────────────────────────────────────
-# 📦 Load model and labels with caching
 @st.cache_resource
 def load_model_and_labels():
-    model_path = "keras_Model.h5"
-    labels_path = "labels.txt"
+    app_dir = os.path.dirname(__file__)  # Path to models folder
 
+    model_path = os.path.join(app_dir, "keras_Model.h5")
+    labels_path = os.path.join(app_dir, "labels.txt")
+
+    st.write("🔍 Inspecting folder:", app_dir)
+    st.write("📂 Contents:", os.listdir(app_dir))
+
+    # Check presence
     if not os.path.exists(model_path):
         st.error(f"❌ Model file not found at: {model_path}")
-        return None, None
-
+        st.stop()
     if not os.path.exists(labels_path):
         st.error(f"❌ Labels file not found at: {labels_path}")
-        return None, None
+        st.stop()
 
-    try:
-        model = load_model(model_path, custom_objects={"DepthwiseConv2D": PatchedDepthwiseConv2D}, compile=False)
-        labels = [label.strip() for label in open(labels_path, "r").readlines()]
-        return model, labels
+    model = load_model(
+        model_path,
+        custom_objects={"DepthwiseConv2D": DepthwiseConv2D},
+        compile=False
+    )
+    labels = [line.strip() for line in open(labels_path)]
+    return model, labels
+
     except Exception as e:
         st.error(f"❌ Failed to load model: {e}")
         return None, None
